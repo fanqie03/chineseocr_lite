@@ -52,17 +52,21 @@ class strLabelConverter(object):
             self.dict[char] = i + 1
 
     
-    def decode(self, t, length, raw=False):
+    def decode(self, t, length, raw=False, char_pix=4):
         t = t[:length]
-        if raw:
-            return ''.join([self.alphabet[i - 1] for i in t])
-        else:
-            char_list = []
-            for i in range(length):
+        raw = ''.join([self.alphabet[i - 1] for i in t])
+        char_list = []
+        for i in range(length):
 
-                if t[i] != 0 and (not (i > 0 and t[i - 1] == t[i])):
-                    char_list.append(self.alphabet[t[i] - 1])
-            return ''.join(char_list)
+            if t[i] != 0 and (not (i > 0 and t[i - 1] == t[i])):
+                char = self.alphabet[t[i] - 1]
+                start = i * char_pix
+                char_list.append({'char': char, 'start': start, 'idx': i})
+        
+        sim_pred = ''.join(dic['char'] for dic in char_list)
+        return {'raw': raw, 'sim_pred': sim_pred, 'char_list': char_list}
+
+
 
 
 

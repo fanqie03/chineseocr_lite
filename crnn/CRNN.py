@@ -58,15 +58,18 @@ class CRNNHandle:
 
 
 
-    def predict_rbg(self, im):
+    def predict_rbg(self, crop_im, bbox):
         """
         预测
         """
-        scale = im.size[1] * 1.0 / 32
-        w = im.size[0] / scale
+        scale = crop_im.size[1] * 1.0 / 32
+        w = crop_im.size[0] / scale
         w = int(w)
 
-        img = im.resize((w, 32), Image.BILINEAR)
+
+        img = crop_im.resize((w, 32), Image.BILINEAR)
+        
+        print('图片原始size [w, h]', crop_im.size, 'scale后的size [w, h]', img.size)
         img = np.array(img, dtype=np.float32)
         img -= 127.5
         img /= 127.5
@@ -77,7 +80,7 @@ class CRNNHandle:
 
         preds = preds[0]
 
-
+        print('crnn模型输出shape', preds.shape, f'每个输出代表的像素大小 {w / preds.shape[0] : .2f}',  )
         length  = preds.shape[0]
         preds = preds.reshape(length,-1)
 
@@ -88,9 +91,20 @@ class CRNNHandle:
 
         preds = preds.reshape(-1)
 
-        sim_pred = converter.decode(preds, length, raw=False)
+        result = converter.decode(preds, length, raw=True)
 
-        return sim_pred
+        # for item in result:
+        raw, sim_pred, char_list = result['raw'], result['sim_pred'], result['char_list']
+
+        for char_item in char_list:  # 添加原始坐标
+            crop_left = char_item['idx'] * 4 * scale  # 在裁剪中的坐标
+            crop_width = (char_item['idx'] + 1) * 4 * scale
+            raw_left = bbox[0][0] + crop_left # 先简单的加上偏移
+            raw_right = raw_left + crop_width
+
+            char_item['bbox'] = [raw_left, bbox[0][1], raw_right, bbox[0][1] + crop_im.size[1]]
+
+        return result
 
 
 
