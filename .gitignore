@@ -133,3 +133,6 @@ dmypy.json
 .idea/
 release/
 projects/
+
+output*
+*.jpg

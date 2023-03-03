@@ -11,6 +11,7 @@ import copy
 from dbnet.dbnet_infer import DBNET
 import time
 import traceback
+import random
 
 class  OcrHandle(object):
     def __init__(self):
@@ -33,16 +34,17 @@ class  OcrHandle(object):
         results = []
         boxes_list = sorted_boxes(np.array(boxes_list))
 
-        line_imgs = []
-        for index, (box, score) in enumerate(zip(boxes_list[:angle_detect_num], score_list[:angle_detect_num])):
-            tmp_box = copy.deepcopy(box)
-            partImg_array = get_rotate_crop_image(im, tmp_box.astype(np.float32))
-            partImg = Image.fromarray(partImg_array).convert("RGB")
-            line_imgs.append(partImg)
+        # 取消angle
+        # line_imgs = []
+        # for index, (box, score) in enumerate(zip(boxes_list[:angle_detect_num], score_list[:angle_detect_num])):
+        #     tmp_box = copy.deepcopy(box)
+        #     partImg_array = get_rotate_crop_image(im, tmp_box.astype(np.float32))
+        #     partImg = Image.fromarray(partImg_array).convert("RGB")
+        #     line_imgs.append(partImg)
 
-        angle_res = False
-        if angle_detect:
-            angle_res = self.angle_handle.predict_rbgs(line_imgs)
+        # angle_res = False
+        # if angle_detect:
+        #     angle_res = self.angle_handle.predict_rbgs(line_imgs)
 
         count = 1
         for index, (box ,score) in enumerate(zip(boxes_list,score_list)):
@@ -53,21 +55,21 @@ class  OcrHandle(object):
 
             partImg = Image.fromarray(partImg_array).convert("RGB")
 
-            if angle_detect and angle_res:
-                partImg = partImg.rotate(180)
+            # if angle_detect and angle_res:
+            #     partImg = partImg.rotate(180)
 
 
-            if not is_rgb:
-                partImg = partImg.convert('L')
+            # if not is_rgb:
+            #     partImg = partImg.convert('L')
 
-            try:
-                if is_rgb:
-                    result = self.crnn_handle.predict_rbg(partImg, tmp_box)  ##识别的文本
-                else:
-                    simPred = self.crnn_handle.predict(partImg)  ##识别的文本
-            except Exception as e:
-                print(traceback.format_exc())
-                continue
+            # try:
+                # if is_rgb:
+            result = self.crnn_handle.predict_rbg(partImg, copy.deepcopy(box))  ##识别的文本
+                # else:
+                #     simPred = self.crnn_handle.predict(partImg)  ##识别的文本
+            # except Exception as e:
+            #     print(traceback.format_exc())
+            #     continue
 
             # if simPred.strip() != '':
             #     results.append([tmp_box,"{}、 ".format(count)+  simPred,score])
@@ -86,34 +88,44 @@ class  OcrHandle(object):
 
 if __name__ == "__main__":
     ocrhandle = OcrHandle()
-    short_size = 960
-    # img = Image.open('invoice_001_000.png')
-    img = Image.open('1.png')
-    res = ocrhandle.text_predict(img,short_size)
+    # for pic_idx, path in enumerate([r'C:\Users\chen.mengfu\Pictures\1.png', r'C:\Users\chen.mengfu\Pictures\2.jpg']):
+    for pic_idx, path in enumerate([r'C:\Users\chen.mengfu\Pictures\R-C.jpg']):
+        short_size = 960
+        img = Image.open(path).convert('RGB')
+        print(np.array(img).shape)
+        # print(img.size)
+        # img = Image.open('1.png')
+        # img = Image.open('R-C.jpg')
+        # img = Image.open(r'C:\Users\chen.mengfu\Pictures\1.png')
+        res = ocrhandle.text_predict(img,short_size)
 
+        img_detected = img.copy()
+        img_draw = ImageDraw.Draw(img_detected)
+        colors = ['red', 'green', 'blue', "purple"]
 
-    img_detected = img.copy()
-    img_draw = ImageDraw.Draw(img_detected)
-    colors = ['red', 'green', 'blue', "purple"]
+        for i, r in enumerate(res):
+            rect, txt, confidence = r['bbox'], r['result'], r['score']
+            # print(txt)
 
-    for i, r in enumerate(res):
-        rect, txt, confidence = r['bbox'], r['result'], r['score']
-        # print(txt)
+            x1,y1,x2,y2,x3,y3,x4,y4 = rect.reshape(-1)
+            size = max(min(x2-x1,y3-y2) // 2 , 15 )
 
-        x1,y1,x2,y2,x3,y3,x4,y4 = rect.reshape(-1)
-        size = max(min(x2-x1,y3-y2) // 2 , 15 )
+            myfont = ImageFont.truetype("仿宋_GB2312.ttf", size=size)
+            fillcolor = random.choice(colors)
+            # # img_draw.text((x1, y1 - size ), str(i+1), font=myfont, fill=fillcolor)
+            # img_draw.text((x1, y1 - size ), str(txt), font=myfont, fill=fillcolor,)
+            # for xy in [(x1, y1, x2, y2), (x2, y2, x3, y3 ), (x3 , y3 , x4, y4), (x4, y4, x1, y1)]:
+            for xy in [(x2, y2, x3, y3 ), (x3 , y3 , x4, y4), (x4, y4, x1, y1)]:
+                img_draw.line(xy=xy, fill=fillcolor, width=2)
 
-        myfont = ImageFont.truetype("仿宋_GB2312.ttf", size=size)
-        fillcolor = colors[i % len(colors)]
-        # # img_draw.text((x1, y1 - size ), str(i+1), font=myfont, fill=fillcolor)
-        # img_draw.text((x1, y1 - size ), str(txt), font=myfont, fill=fillcolor,)
-        # for xy in [(x1, y1, x2, y2), (x2, y2, x3, y3 ), (x3 , y3 , x4, y4), (x4, y4, x1, y1)]:
-        #     img_draw.line(xy=xy, fill=colors[i % len(colors)], width=2)
+            for j, char_item in enumerate( txt['char_list']):
+                char, ((x1, y1), (x2, y2)) = char_item['char'], char_item['line']
+                # img_draw.rectangle((x1, y1, x2, y2),  outline=colors[j % len(colors)], width=1)
+                img_draw.text((x1, y1 - size ), str(char), font=myfont, fill=fillcolor,)
+                img_draw.line((x1, y1, x2, y2),  fill=fillcolor, width=1)
+                center = ((x2+x1)/2, (y2+y1)/2)
+                r = 8
+                img_draw.ellipse((center[0] - r, center[1] - r, center[0] + r, center[1] + r), outline=fillcolor, width=2)
 
-        for j, char_item in enumerate( txt['char_list']):
-            char, (x1, y1, x2, y2) = char_item['char'], char_item['bbox']
-            # img_draw.rectangle((x1, y1, x2, y2),  outline=colors[j % len(colors)], width=1)
-            img_draw.text((x1, y1 - size ), str(char), font=myfont, fill=fillcolor,)
-            img_draw.rectangle((x1, y1, x1, y2),  outline=fillcolor, width=1)
-
-    img_detected.save('output1.jpg', format='JPEG')
+        img_detected = img_detected.convert('RGB')
+        img_detected.save(f'output{pic_idx}.jpg', format='JPEG')

@@ -1,5 +1,6 @@
 from PIL import  Image
 import numpy as np
+import math
 import cv2
 from .keys import alphabetChinese as alphabet
 # from keys import alphabetChinese as alphabet
@@ -7,6 +8,69 @@ from .keys import alphabetChinese as alphabet
 import onnxruntime as rt
 # from util import strLabelConverter, resizeNormalize
 from .util import strLabelConverter, resizeNormalize
+# from ..utils import reverse_rotate_crop_image
+
+# 绕pointx,pointy顺时针旋转
+def Srotate(angle,valuex,valuey,pointx,pointy):
+  valuex = np.array(valuex)
+  valuey = np.array(valuey)
+  sRotatex = (valuex-pointx)*math.cos(angle) + (valuey-pointy)*math.sin(angle) + pointx
+  sRotatey = (valuey-pointy)*math.cos(angle) - (valuex-pointx)*math.sin(angle) + pointy
+  return sRotatex,sRotatey
+# ————————————————
+# 版权声明：本文为CSDN博主「星夜孤帆」的原创文章，遵循CC 4.0 BY-SA版权协议，转载请附上原文出处链接及本声明。
+# 原文链接：https://blog.csdn.net/qq_38826019/article/details/84233397
+
+def reverse_rotate_crop_image(img, part_img, points, part_points, origin):
+    """
+    get_rotate_crop_image的逆操作
+    img为原图
+    part_img为crop后的图
+    bbox_points为part_img中对应在原图的bbox, 四个点，左上，右上，右下，左下
+    part_points为在part_img中的点[(x, y), (x, y)]
+    """
+    # np.rot
+    points = np.float32(points)
+    left = int(np.min(points[:, 0]))
+    right = int(np.max(points[:, 0]))
+    top = int(np.min(points[:, 1]))
+    bottom = int(np.max(points[:, 1]))
+    # img_crop = img[top:bottom, left:right, :].copy()
+    points[:, 0] = points[:, 0] - left
+    points[:, 1] = points[:, 1] - top
+    img_crop_width = int(np.linalg.norm(points[0] - points[1]))
+    img_crop_height = int(np.linalg.norm(points[0] - points[3]))
+    pts_std = np.float32([[0, 0], [img_crop_width, 0],\
+        [img_crop_width, img_crop_height], [0, img_crop_height]])
+    # print(points, points.shape, pts_std, pts_std.shape)
+    M = cv2.getPerspectiveTransform(points, pts_std)
+    _, IM = cv2.invert(M)
+    raw_points = []
+    # if img_crop_height * 1.0 / img_crop_width >= 1.5:
+    #     part_points.reverse()
+
+    for point in part_points:
+        p = np.float32(point + [1])
+        x, y, z = np.dot(IM, p)
+        new_point = [x/z , y/z]
+
+        if img_crop_height * 1.0 / img_crop_width >= 1.5:
+            new_point = Srotate(math.radians(-90), new_point[0], new_point[1], origin[0], origin[1])
+
+        
+        new_point = [int(new_point[0] + left), int(new_point[1] + top)]
+
+        raw_points.append(new_point)    
+    return raw_points
+
+
+def expand_line_to_box(line, w):
+    """
+    line [(x1, y1), (x2, y2)]
+    """
+    # radio = 
+
+
 
 converter = strLabelConverter(''.join(alphabet))
 
@@ -96,13 +160,27 @@ class CRNNHandle:
         # for item in result:
         raw, sim_pred, char_list = result['raw'], result['sim_pred'], result['char_list']
 
+        prev_line = [[0, 0], [0, crop_im.size[1]]]
+        prev_line = reverse_rotate_crop_image(None, None, bbox, prev_line, (0, 0))
+
         for char_item in char_list:  # 添加原始坐标
             crop_left = char_item['idx'] * 4 * scale  # 在裁剪中的坐标
-            crop_width = (char_item['idx'] + 1) * 4 * scale
-            raw_left = bbox[0][0] + crop_left # 先简单的加上偏移
-            raw_right = raw_left + crop_width
+            # crop_width = (char_item['idx'] + 1) * 4 * scale
+            # raw_left = bbox[0][0] + crop_left # 先简单的加上偏移
+            # raw_right = raw_left + crop_width
+            # 中线
+            line = [[crop_left, 0], [crop_left, crop_im.size[1]]]
+            # line = [[crop_left, 0], [crop_left, crop_im.size[1]]]
+            # line = [[crop_left + bbox[0][0], 0], [crop_left + bbox[0][0], crop_im.size[1]]]
+            
+            line = reverse_rotate_crop_image(None, None, bbox, line, (0, 0))
+            char_item['line'] = line
 
-            char_item['bbox'] = [raw_left, bbox[0][1], raw_right, bbox[0][1] + crop_im.size[1]]
+            w = ((line[0][0] - prev_line[0][0]) ** 2 + (line[0][1] - prev_line[0][1]) ** 2) ** 0.5
+
+
+            prev_line = line
+        
 
         return result
 
