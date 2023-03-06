@@ -16,7 +16,7 @@ def Srotate(angle,valuex,valuey,pointx,pointy):
   valuey = np.array(valuey)
   sRotatex = (valuex-pointx)*math.cos(angle) + (valuey-pointy)*math.sin(angle) + pointx
   sRotatey = (valuey-pointy)*math.cos(angle) - (valuex-pointx)*math.sin(angle) + pointy
-  return sRotatex,sRotatey
+  return [sRotatex,sRotatey]
 # ————————————————
 # 版权声明：本文为CSDN博主「星夜孤帆」的原创文章，遵循CC 4.0 BY-SA版权协议，转载请附上原文出处链接及本声明。
 # 原文链接：https://blog.csdn.net/qq_38826019/article/details/84233397
@@ -43,6 +43,8 @@ def reverse_rotate_crop_image(img, part_img, points, part_points, origin):
     pts_std = np.float32([[0, 0], [img_crop_width, 0],\
         [img_crop_width, img_crop_height], [0, img_crop_height]])
     # print(points, points.shape, pts_std, pts_std.shape)
+
+
     M = cv2.getPerspectiveTransform(points, pts_std)
     _, IM = cv2.invert(M)
     raw_points = []
@@ -50,13 +52,14 @@ def reverse_rotate_crop_image(img, part_img, points, part_points, origin):
     #     part_points.reverse()
 
     for point in part_points:
-        p = np.float32(point + [1])
+        new_point = point
+        if img_crop_height * 1.0 / img_crop_width >= 1.5:
+            new_point = Srotate(math.radians(-90), new_point[0], new_point[1], 0 , 0)
+            new_point[0] = new_point[0] + img_crop_width
+        
+        p = np.float32(new_point + [1])
         x, y, z = np.dot(IM, p)
         new_point = [x/z , y/z]
-
-        if img_crop_height * 1.0 / img_crop_width >= 1.5:
-            new_point = Srotate(math.radians(-90), new_point[0], new_point[1], origin[0], origin[1])
-
         
         new_point = [int(new_point[0] + left), int(new_point[1] + top)]
 
@@ -162,8 +165,9 @@ class CRNNHandle:
 
         prev_line = [[0, 0], [0, crop_im.size[1]]]
         prev_line = reverse_rotate_crop_image(None, None, bbox, prev_line, (0, 0))
-
-        for char_item in char_list:  # 添加原始坐标
+        ws = []
+        points = []
+        for i, char_item in enumerate(char_list):  # 添加原始坐标
             crop_left = char_item['idx'] * 4 * scale  # 在裁剪中的坐标
             # crop_width = (char_item['idx'] + 1) * 4 * scale
             # raw_left = bbox[0][0] + crop_left # 先简单的加上偏移
@@ -177,10 +181,35 @@ class CRNNHandle:
             char_item['line'] = line
 
             w = ((line[0][0] - prev_line[0][0]) ** 2 + (line[0][1] - prev_line[0][1]) ** 2) ** 0.5
+            w = min(w, crop_im.size[1] / 2)
+            # left = crop_left
+            ws.append([crop_left - w, crop_left + w])
 
+            # rect = [[crop_left - w, 0], [crop_left - w, crop_im.size[1]], [crop_left + w, crop_im.size[1]], [crop_left + w, 0]]
+            # rect = reverse_rotate_crop_image(None, None, bbox, rect, (0, 0))
+            # char_item['bbox'] = rect
 
             prev_line = line
-        
+        # ws.append(ws[-1])
+        # for i in range(1, len(ws) - 1):  # 添加原始坐标
+        # for (left, right), char_item in zip(ws, char_list):
+        # 调整bbox有重叠的地方
+        ws.append([crop_im.size[0], crop_im.size[0]])
+        for i in range(len(ws) - 1):
+            cur, nxt = ws[i], ws[i+1]
+            if cur[1] > nxt[0]:  # 有交集
+                distance = abs(cur[1] - nxt[0])
+                cur[0] += distance / 2
+                cur[1] -= distance / 2
+                nxt[0] += distance / 2
+                nxt[1] -= distance / 2
+        ws.pop()
+
+        for (left, right), char_item in zip(ws, char_list):
+            rect = [[left, 0], [left, crop_im.size[1]], [right, crop_im.size[1]], [right, 0]]
+            rect = reverse_rotate_crop_image(None, None, bbox, rect, (0, 0))
+            char_item['bbox'] = rect
+
 
         return result
 

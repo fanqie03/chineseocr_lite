@@ -89,7 +89,7 @@ class  OcrHandle(object):
 if __name__ == "__main__":
     ocrhandle = OcrHandle()
     # for pic_idx, path in enumerate([r'C:\Users\chen.mengfu\Pictures\1.png', r'C:\Users\chen.mengfu\Pictures\2.jpg']):
-    for pic_idx, path in enumerate([r'C:\Users\chen.mengfu\Pictures\R-C.jpg']):
+    for pic_idx, path in enumerate([r'C:\Users\chen.mengfu\Pictures\R-C.jpg', r'C:\Users\chen.mengfu\Pictures\4.png']):
         short_size = 960
         img = Image.open(path).convert('RGB')
         print(np.array(img).shape)
@@ -122,10 +122,16 @@ if __name__ == "__main__":
                 char, ((x1, y1), (x2, y2)) = char_item['char'], char_item['line']
                 # img_draw.rectangle((x1, y1, x2, y2),  outline=colors[j % len(colors)], width=1)
                 img_draw.text((x1, y1 - size ), str(char), font=myfont, fill=fillcolor,)
-                img_draw.line((x1, y1, x2, y2),  fill=fillcolor, width=1)
+                # img_draw.line((x1, y1, x2, y2),  fill=fillcolor, width=1)
                 center = ((x2+x1)/2, (y2+y1)/2)
                 r = 8
-                img_draw.ellipse((center[0] - r, center[1] - r, center[0] + r, center[1] + r), outline=fillcolor, width=2)
+                # img_draw.ellipse((center[0] - r, center[1] - r, center[0] + r, center[1] + r), outline=fillcolor, width=2)
+
+                x1,y1,x2,y2,x3,y3,x4,y4 = np.int32(char_item['bbox']).reshape(-1)
+                color = random.choice(colors)
+                for xy in [(x1, y1, x2, y2), (x2, y2, x3, y3 ), (x3 , y3 , x4, y4), (x4, y4, x1, y1)]:
+                    img_draw.line(xy=xy, fill=color, width=2)
+
 
         img_detected = img_detected.convert('RGB')
         img_detected.save(f'output{pic_idx}.jpg', format='JPEG')
