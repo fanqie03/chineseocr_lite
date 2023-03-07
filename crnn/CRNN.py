@@ -2,6 +2,7 @@ from PIL import  Image
 import numpy as np
 import math
 import cv2
+import re
 from .keys import alphabetChinese as alphabet
 # from keys import alphabetChinese as alphabet
 
@@ -210,6 +211,32 @@ class CRNNHandle:
             rect = reverse_rotate_crop_image(None, None, bbox, rect, (0, 0))
             char_item['bbox'] = rect
 
+        def group_char_to_word(char_items):
+            bboxs = [x['bbox'] for x in char_items]
+            points = np.int0(bboxs).reshape((-1, 1, 2))
+            rect = cv2.minAreaRect(points)
+            bbox = np.int0(cv2.boxPoints(rect))
+            return {'value': ''.join(x['char'] for x in char_items), 'bbox': bbox}
+
+        words = []
+        matchs = list(re.finditer('[:：;；]+', sim_pred))
+        # if len(matchs) != 0:
+        #     print(sim_pred, matchs)
+        prev_idx = 0
+        for match in matchs:
+            left, right = match.span()
+            if prev_idx != left:
+                words.append(group_char_to_word(char_list[prev_idx: left]))
+                # print(words[-1])
+            words.append(group_char_to_word(char_list[left: right]))
+            prev_idx = right
+        
+        if prev_idx != len(char_list):
+            words.append(group_char_to_word(char_list[prev_idx:]))
+
+        # if len(words) != 1:
+        #     print(words)
+        result['words'] = words
 
         return result
 
